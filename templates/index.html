@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Water Quality Classification | ML Potability Predictor</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+</head>
+<body>
+  <header class="hero">
+    <div class="container hero-inner">
+      <div class="hero-badge">
+        <svg class="icon-drop" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M12 2.5C12 2.5 5 10.2 5 15a7 7 0 0 0 14 0c0-4.8-7-12.5-7-12.5Zm0 17a4.5 4.5 0 0 1-4.5-4.5c0-1.9 1.8-4.9 4.5-8.4 2.7 3.5 4.5 6.5 4.5 8.4A4.5 4.5 0 0 1 12 19.5Z" fill="currentColor"/>
+        </svg>
+        <span>Random Forest Classifier</span>
+      </div>
+      <h1>Water Quality Classification</h1>
+      <p class="hero-subtitle">
+        Predict whether a water sample is <strong>Potable</strong> or <strong>Not Potable</strong>
+        from 9 physicochemical measurements trained on the real Water Potability dataset.
+      </p>
+
+      {% if metrics %}
+      <div class="metrics-strip">
+        <div class="metric-pill">
+          <span class="metric-label">Dataset Samples</span>
+          <span class="metric-value">{{ "{:,}".format(metrics.dataset_rows) }}</span>
+        </div>
+        <div class="metric-pill">
+          <span class="metric-label">Test Accuracy</span>
+          <span class="metric-value">{{ metrics.test_accuracy }}%</span>
+        </div>
+        <div class="metric-pill">
+          <span class="metric-label">ROC-AUC</span>
+          <span class="metric-value">{{ metrics.roc_auc }}</span>
+        </div>
+        <div class="metric-pill">
+          <span class="metric-label">Input Features</span>
+          <span class="metric-value">9 Parameters</span>
+        </div>
+      </div>
+      {% endif %}
+    </div>
+  </header>
+
+  <main class="container main-layout">
+    <section class="card form-card" aria-labelledby="form-heading">
+      <div class="card-header">
+        <div>
+          <h2 id="form-heading">Water Sample Parameters</h2>
+          <p class="card-description">
+            Enter laboratory measurements below or load a sample preset to run a live model prediction.
+          </p>
+        </div>
+        <div class="preset-actions">
+          <button type="button" class="btn btn-outline btn-sm" id="btn-potable-sample">
+            Potable Sample
+          </button>
+          <button type="button" class="btn btn-outline btn-sm" id="btn-nonpotable-sample">
+            Non-Potable Sample
+          </button>
+        </div>
+      </div>
+
+      {% if errors %}
+      <div class="alert alert-error" role="alert">
+        <strong>Please check your input:</strong>
+        <ul>
+          {% for err in errors %}
+          <li>{{ err }}</li>
+          {% endfor %}
+        </ul>
+      </div>
+      {% endif %}
+
+      <form method="POST" action="{{ url_for('index') }}" class="prediction-form" id="water-form" novalidate>
+        <div class="input-grid">
+          {% for field in feature_specs %}
+          <div class="form-group">
+            <label for="{{ field.name }}">
+              <span class="label-text">{{ field.label }}</span>
+              <span class="unit-badge">{{ field.unit }}</span>
+            </label>
+            <input
+              type="number"
+              step="any"
+              id="{{ field.name }}"
+              name="{{ field.name }}"
+              min="{{ field.min }}"
+              {% if field.max is not none %}max="{{ field.max }}"{% endif %}
+              placeholder="{{ field.placeholder }}"
+              value="{{ form_values.get(field.name, '') }}"
+              required
+            />
+            <small class="field-hint">{{ field.hint }}</small>
+          </div>
+          {% endfor %}
+        </div>
+
+        <div class="form-actions">
+          <button type="submit" class="btn btn-primary" id="predict-btn">
+            Predict Water Quality
+          </button>
+          <button type="button" class="btn btn-ghost" id="clear-btn">
+            Clear Form
+          </button>
+        </div>
+      </form>
+    </section>
+
+    <aside class="card result-card" aria-live="polite">
+      {% if prediction %}
+      <div class="result-banner {{ 'result-potable' if prediction.is_potable else 'result-not-potable' }}">
+        <div class="result-icon" aria-hidden="true">
+          {% if prediction.is_potable %}
+          <svg viewBox="0 0 24 24"><path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" fill="currentColor"/></svg>
+          {% else %}
+          <svg viewBox="0 0 24 24"><path d="M12 2 1 21h22L12 2Zm1 14h-2v2h2v-2Zm0-6h-2v4h2v-4Z" fill="currentColor"/></svg>
+          {% endif %}
+        </div>
+        <div>
+          <span class="result-kicker">Prediction Result</span>
+          <h2 class="result-title">{{ prediction.label }}</h2>
+          <p class="result-subtitle">{{ prediction.headline }}</p>
+        </div>
+      </div>
+
+      <div class="probability-section">
+        <div class="prob-header">
+          <span>Model Confidence</span>
+          <strong>{{ prediction.confidence }}%</strong>
+        </div>
+
+        <div class="prob-bar-group">
+          <div class="prob-row">
+            <span>Potable (Safe)</span>
+            <span>{{ prediction.potable_prob }}%</span>
+          </div>
+          <div class="progress-track">
+            <div class="progress-fill progress-potable" style="width: {{ prediction.potable_prob }}%;"></div>
+          </div>
+        </div>
+
+        <div class="prob-bar-group">
+          <div class="prob-row">
+            <span>Not Potable (Unsafe)</span>
+            <span>{{ prediction.not_potable_prob }}%</span>
+          </div>
+          <div class="progress-track">
+            <div class="progress-fill progress-unsafe" style="width: {{ prediction.not_potable_prob }}%;"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="submitted-summary">
+        <h3>Submitted Sample Readings</h3>
+        <dl class="summary-grid">
+          {% for field in feature_specs %}
+          <div class="summary-item">
+            <dt>{{ field.label }}</dt>
+            <dd>{{ form_values.get(field.name, '-') }} <span class="summary-unit">{{ field.unit }}</span></dd>
+          </div>
+          {% endfor %}
+        </dl>
+      </div>
+
+      <p class="disclaimer">
+        Note: Predictions are generated by a machine learning model trained on historical water samples
+        and are intended for educational and screening purposes, not as a substitute for certified lab testing.
+      </p>
+      {% else %}
+      <div class="empty-state">
+        <div class="empty-illustration" aria-hidden="true">
+          <svg viewBox="0 0 64 64">
+            <circle cx="32" cy="32" r="28" fill="#e8f3ff" />
+            <path d="M32 14C32 14 20 27.6 20 36a12 12 0 0 0 24 0c0-8.4-12-22-12-22Z" fill="#1976d2" />
+            <path d="M27 37a5 5 0 0 0 5 5" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" fill="none" />
+          </svg>
+        </div>
+        <h2>Ready to Analyze</h2>
+        <p>
+          Fill in the 9 water quality measurements on the left and click
+          <strong>Predict Water Quality</strong> to classify the sample as
+          <strong>Potable</strong> or <strong>Not Potable</strong>.
+        </p>
+        <div class="info-box">
+          <h3>How it works</h3>
+          <ul>
+            <li>Missing training values are handled using median imputation.</li>
+            <li>A scikit-learn <strong>Random Forest Classifier</strong> evaluates all 9 features.</li>
+            <li>Results display both the classification label and class probabilities.</li>
+          </ul>
+        </div>
+      </div>
+      {% endif %}
+    </aside>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <p>Water Quality Classification &bull; Python, Flask &amp; Scikit-Learn</p>
+    </div>
+  </footer>
+
+  <script>
+    const POTABLE_SAMPLE = {
+      ph: "7.301445",
+      Hardness: "143.431350",
+      Solids: "46718.555965",
+      Chloramines: "4.768781",
+      Sulfate: "252.466485",
+      Conductivity: "446.839673",
+      Organic_carbon: "12.575417",
+      Trihalomethanes: "60.648404",
+      Turbidity: "3.160075"
+    };
+
+    const NON_POTABLE_SAMPLE = {
+      ph: "4.370477",
+      Hardness: "188.654037",
+      Solids: "29542.338165",
+      Chloramines: "8.117114",
+      Sulfate: "301.022182",
+      Conductivity: "456.308454",
+      Organic_carbon: "16.346838",
+      Trihalomethanes: "46.696941",
+      Turbidity: "4.649382"
+    };
+
+    function fillSample(sample) {
+      Object.entries(sample).forEach(([key, val]) => {
+        const input = document.getElementById(key);
+        if (input) input.value = val;
+      });
+    }
+
+    document.getElementById("btn-potable-sample")?.addEventListener("click", () => {
+      fillSample(POTABLE_SAMPLE);
+    });
+
+    document.getElementById("btn-nonpotable-sample")?.addEventListener("click", () => {
+      fillSample(NON_POTABLE_SAMPLE);
+    });
+
+    document.getElementById("clear-btn")?.addEventListener("click", () => {
+      const form = document.getElementById("water-form");
+      if (!form) return;
+      form.querySelectorAll("input").forEach((el) => {
+        el.value = "";
+      });
+    });
+  </script>
+</body>
+</html>

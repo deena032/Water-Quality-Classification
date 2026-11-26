@@ -24,7 +24,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
 
 BASE_DIR = Path(__file__).resolve().parent
-DATA_PATH = BASE_DIR / "water_potability.csv"
+DATA_PATH = BASE_DIR / "data" / "water_potability.csv"
 MODEL_PATH = BASE_DIR / "model.pkl"
 METRICS_PATH = BASE_DIR / "model_metrics.json"
 
